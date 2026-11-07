@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlap｜影像對齊實驗室</title><link rel="stylesheet" href="{{ stylesheet }}"></head>
+<body><main>
+<header><div class="brand">◈ OVERLAP <span>影像對齊實驗室</span></div><span class="tag">LOCAL · CPU</span></header>
+<section class="intro"><p class="eyebrow">TWO IMAGES. ONE SHARED PLACE.</p><h1>找到兩張照片的<br><em>交集。</em></h1><p>旋轉、縮放、時間與光線改變了畫面。<br>從局部特徵，找回最可信的對應位置。</p></section>
+<section class="samples-section" aria-labelledby="samples-title"><div class="samples-heading"><h2 id="samples-title">先選一組照片試試</h2><span>點選載入 A、B，再按「尋找對應區域」</span></div>
+<div id="samples" class="samples-grid">
+{% for sample in samples %}
+<button class="sample-card" type="button" data-available="{{ 'true' if sample.available else 'false' }}" data-sample="{{ sample|tojson|forceescape }}" aria-pressed="false" {% if not sample.available %}disabled{% endif %}>
+{% if sample.available %}<div class="sample-thumbnails">{% for phase in ['a', 'b'] %}<div><img src="{{ sample[phase] }}" alt="{{ sample.title }} 圖片 {{ phase|upper }}" width="256" height="256"><span>{{ phase|upper }}</span></div>{% endfor %}</div>{% endif %}
+<strong>{{ sample.title }}</strong><span class="sample-description">{{ sample.description }}</span>
+{% if not sample.available %}<span class="sample-description">範例尚未準備完成，請先上傳自己的照片。</span>{% endif %}
+</button>
+{% endfor %}
+</div><noscript><p>照片可直接瀏覽；請啟用 JavaScript 以載入範例並執行匹配。</p></noscript>
+<p class="hint">影像來源：<a href="https://github.com/justchenhao/LEVIR" target="_blank" rel="noopener noreferrer">LEVIR-CD</a>／Google Earth。限學術研究、禁止商用；旋轉縮放為人工變換，各圖無確切拍攝日期。</p></section>
+<form id="form" action="{{ url_for('register') }}"><div class="uploads">
+<label class="upload"><input name="a" type="file" accept="image/*" required><span class="letter">A</span><strong>參考圖片</strong><span class="filename">選擇圖片或拖放至此</span><img alt="參考圖片預覽" hidden></label>
+<label class="upload"><input name="b" type="file" accept="image/*" required><span class="letter">B</span><strong>待對齊圖片</strong><span class="filename">可使用不同時間、方向與尺寸</span><img alt="待對齊圖片預覽" hidden></label>
+</div><div class="controls"><label>特徵方法 <select name="method"><option value="compare">比較 SIFT 與 CNN</option><option value="sift">SIFT</option><option value="lightglue">SuperPoint＋LightGlue</option></select></label><label class="check"><input name="rotation_search" type="checkbox">四方向搜尋 <small>較慢，適合 CNN 大角度旋轉</small></label><button id="submit">尋找對應區域 <span>↗</span></button></div></form>
+<p class="hint">圖片會在本機伺服器處理，不寫入磁碟。長邊最多 1600 px；預覽最多 1800 px。結果可能受視差、重複紋理與重疊不足影響。</p>
+<p id="status" role="status" aria-live="polite"></p><div id="results"></div>
+<footer>最佳候選 ≠ 保證正確。請配合匹配點、覆蓋率與疊圖判讀。<span class="version"> · 版本 gallery-2</span></footer>
+</main><script src="{{ javascript }}"></script></body></html>
