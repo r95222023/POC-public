@@ -73,6 +73,52 @@ curl -f -X POST http://127.0.0.1:5000/api/align \
 
 測試分為原始跨時間配對、跨時間再加旋轉／縮放／透視／色調／裁切、90 度方向搜尋、同日期已知變換與無關影像對照。跨時間以原先配準的單位矩陣作**近似參考**，來源本身可能殘留偏移；同日期人工變換才有精確已知的幾何真值。25 點網格誤差獨立於被選中的匹配點誤差，能揭露局部吻合但整體扭曲的候選。
 
+## 照片三維重建實驗：相機定位與稀疏點雲
+
+`reconstruct_sparse.py` 是獨立的 CPU 實驗入口，將同一場景的多視角照片 ZIP 交給官方 PyCOLMAP 進行 SIFT、全配對幾何驗證與增量 SfM。照片按相機廠牌／型號、解析度與 EXIF 焦距分組，共用各組內參；原始照片與 EXIF 以原位元組保存。它不使用 iTwin 的模型協助重建。
+
+Windows 從本目錄執行，使用既有 `.venv`，另將選用套件安裝至專案快取：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --only-binary=:all: --no-deps --target .cache\photogrammetry -r requirements-photogrammetry.txt
+.\.venv\Scripts\python.exe reconstruct_sparse.py ..\samples\PhotoGroup-132.zip --output outputs\reconstruction\run-001
+```
+
+輸出目錄必須為空，避免混用不同次結果；重新實驗請指定新的目錄。預設長邊上限 1600、SIFT 特徵目標數 4096、2 個 CPU 執行緒，可用 `--max-image-size`、`--max-features`、`--threads` 調整。不同方向的特徵可能使實際 SIFT 數量超過設定目標數。
+
+- `report.json`：設定、階段、執行秒數、各模型定位成功／未成功照片、點數、重投影誤差。分為 `all_images_registered`、`partial_reconstruction`、`no_reconstruction`，例外則為 `failed`。
+- `preview.html`：可離線開啟的互動稀疏點雲，拖曳旋轉、滾輪縮放；橘點為相機中心。預覽使用定位照片最多的單一模型。
+- `sparse/<模型編號>/`：COLMAP 二進位與文字模型、彩色 `points.ply`、相機中心與統計，保留供密集重建接續。
+- `images.json`、`images/`、`database.db`：影像來源／SHA-256／相機分組、解壓照片與特徵配對資料庫。
+
+這個階段**尚不產生密集點雲、表面網格或貼圖**。沒有控制點與地理配準，尺度及世界座標未校正；低重投影誤差也不能證明公尺尺度的正確性。只有回傳模型不足以驗收，還須檢查照片是否集中於同一模型、相機軌跡與點雲形狀，以及三角化視角。輸入 ZIP 上限為解壓後 2 GiB，EXIF 方向須先正規化為 1。
+
+`samples/`、快取與輸出皆為本機資料，不提交照片或模型。詳見 [COLMAP 官方 Python 文件](https://colmap.github.io/pycolmap/index.html)。
+
+預覽預設隱藏可疑離群點，並可切換「顯示相機位置」。篩選條件是觀測照片少於 3 張、平均重投影誤差大於 1.5 px，或 16 鄰點平均距離超過全體中位數＋6 倍標準化 MAD；`preview_filter.json` 記錄實際數量及門檻。此操作僅隱藏顯示，不刪除或移動原始三維點，也不使用離地高度作為判斷依據。
+
+## 密集重建、貼圖與離群點表面投影
+
+沿用稀疏重建的 COLMAP 模型，選用官方 OpenMVS 2.4.0 CPU 工具。Windows 使用專案 `.venv` 執行下列命令，安裝器會下載官方發行檔、驗證固定 SHA-256 並解壓到 `.cache/`：
+
+```powershell
+.\.venv\Scripts\python.exe setup_photogrammetry.py --surface
+.\.venv\Scripts\python.exe reconstruct_surface.py outputs\reconstruction\run-001 --output outputs\reconstruction\run-001\surface
+.\.venv\Scripts\python.exe -m http.server 5001 --bind 127.0.0.1 --directory outputs\reconstruction\run-001
+```
+
+完成後在瀏覽器開啟 `http://127.0.0.1:5001/surface/preview.html`。先確認 5001 埠未被其他服務佔用；若已被使用，另選空閒埠。GLB 與修整點雲可由頁面下載。首次產生預覽會從官方 npm registry 取得固定版本 Three.js 0.180.0，後續沿用快取；所有預覽資產由本機 HTTP 提供，瀏覽器不會將照片上傳到第三方。
+
+預設去畸變照片長邊 1280、密集深度圖長邊上限 640、2 個 CPU 執行緒、4 個鄰近視角、至少 3 個視角同意後融合，適合先驗證流程。可用 `--max-image-size`、`--dense-resolution`、`--threads` 調整。重跑請指定新空目錄；失敗時保留各模組的 timestamped `.log` 與 `surface_report.json`，不把既有產物當成此次成功。
+
+若要從中斷的同一次工作接續，在相同命令加上 `--resume`；程式會核對稀疏模型的 SHA-256 與設定，僅沿用一致的已完成階段。更換來源或設定時必須另建輸出目錄。
+
+輸出包括：`model.glb`（貼圖模型）、`scene_mesh.ply`（表面）、`points_surface_repaired.ply`（修整點雲）、`points.json`（原始／修整座標與可疑點標記）、`point_repair.json`（點 ID／最近三角面／位移統計）及 `surface_report.json`。僅對前述篩選得到的可疑點進行最近三角面投影，其他點保持原座標；原始 sparse 模型不被覆寫。網頁可切換貼圖、白模、原始點雲與修整點雲。
+
+GLB 會嵌入原本分離的貼圖，下載單一檔案即可攜帶材質；引擎原始 GLB 另保留為 `model_openmvs.glb`。目前明確停用全域／局部接縫亮度調整與銳化：本機 PhotoGroup-132 實測中，啟用這些後處理使三角面有效區接近全黑，停用後恢復正常照片色彩。此設定可能留下較明顯的照片接縫，須逐批檢視。
+
+**表面投影是視覺修整，不會增加量測精度。** 表面本身若錯誤或缺漏，投影亦可能落在不合理位置；水面、植被、遮擋及視角不足仍可能造成破洞或浮動表面。這個低解析度實驗流程不宣稱達到 iTwin 成果品質。引擎與依賴的授權見 [第三方說明](../THIRD_PARTY.md)。
+
 ## 驗證
 
 ```bash

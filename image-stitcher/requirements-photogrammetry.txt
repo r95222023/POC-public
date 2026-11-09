@@ -1,0 +1,5 @@
+# Optional CPU sparse reconstruction; install into .cache/photogrammetry.
+pycolmap==4.2.1
+trimesh==5.2.0
+scipy==1.18.1
+rtree==1.4.1

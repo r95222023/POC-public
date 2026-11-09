@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>照片三維重建｜稀疏點雲</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101820;color:#e7edf2;font:15px system-ui,sans-serif}
+header{padding:22px 28px;background:#17232d}h1{font-size:23px;margin:0 0 12px}.metrics{display:flex;gap:22px;flex-wrap:wrap;color:#82dfc3}
+p{color:#b5c5d1;line-height:1.6;margin:12px 0 0}canvas{display:block;width:100%;height:70vh;touch-action:none;cursor:grab}
+footer{padding:10px 28px;color:#b5c5d1}button{background:#25443e;color:white;border:1px solid #578b7f;padding:7px 14px;border-radius:5px}
+.controls{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px}label{display:flex;gap:8px;align-items:center}
+</style>
+<header><h1>照片三維重建 · 稀疏點雲</h1><div class="metrics" id="metrics"></div>
+<p>拖曳旋轉，滾輪縮放。橘色方點代表空中的相機位置。此結果為稀疏重建，尚無表面網格與貼圖；座標及比例尺未校正。</p>
+<div class="controls"><label><input id="filter" type="checkbox" checked>隱藏可疑離群點（僅預覽）</label><label><input id="cameras" type="checkbox">顯示相機位置</label></div>
+<p id="filter-status"></p><p id="surface-link" hidden><a href="./surface/preview.html" style="color:#82dfc3">查看貼圖模型與修整點雲 ↗</a></p></header>
+<canvas id="view" aria-label="可拖曳旋轉的稀疏三維點雲"></canvas>
+<footer><button id="reset">重設視角</button> <span id="count"></span></footer>
+<script>
+const scene=__SCENE_DATA__;
+const canvas=document.getElementById('view'),ctx=canvas.getContext('2d');
+const stats=scene.stats;
+document.getElementById('surface-link').hidden=!scene.surface_preview;
+const filterInput=document.getElementById('filter'),cameraInput=document.getElementById('cameras');
+document.getElementById('metrics').textContent=`照片定位 ${stats.registered_images} / ${stats.input_images}　｜　三維點 ${stats.points3D.toLocaleString()}　｜　平均重投影誤差 ${stats.mean_reprojection_error_px.toFixed(3)} px`;
+const axes=[0,1,2].map(k=>scene.points.map(p=>p[k]).sort((a,b)=>a-b));
+const mid=axes.map(a=>a[Math.floor(a.length/2)]);
+const radius=Math.max(...axes.map(a=>a[Math.floor(a.length*.98)]-a[Math.floor(a.length*.02)]))/2||1;
+const points=scene.points.map(p=>[(p[0]-mid[0])/radius,(p[1]-mid[1])/radius,(p[2]-mid[2])/radius,...p.slice(3)]);
+const cameras=scene.cameras.map(c=>c.center.map((v,k)=>(v-mid[k])/radius));
+let yaw=.3,pitch=-.6,zoom=1,drag=null;
+function project(p,w,h){
+ const x=p[0]*Math.cos(yaw)-p[2]*Math.sin(yaw),z=p[0]*Math.sin(yaw)+p[2]*Math.cos(yaw);
+ const y=p[1]*Math.cos(pitch)-z*Math.sin(pitch),depth=p[1]*Math.sin(pitch)+z*Math.cos(pitch);
+ return [w/2+x*Math.min(w,h)*.28*zoom,h/2+y*Math.min(w,h)*.28*zoom,depth];
+}
+function draw(){
+ const dpr=devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
+ canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ ctx.fillStyle='#101820';ctx.fillRect(0,0,w,h);
+ const visible=filterInput.checked?points.filter(p=>p[6]):points;
+ const projected=visible.map(p=>[...project(p,w,h),p[3],p[4],p[5]]).sort((a,b)=>b[2]-a[2]);
+ for(const p of projected){ctx.fillStyle=`rgb(${p[3]},${p[4]},${p[5]})`;ctx.fillRect(p[0],p[1],2,2);}
+ if(cameraInput.checked){ctx.fillStyle='#ffb45e';for(const c of cameras){const p=project(c,w,h);ctx.fillRect(p[0]-3,p[1]-3,6,6);}}
+ document.getElementById('count').textContent=`顯示 ${visible.length.toLocaleString()} / ${points.length.toLocaleString()} 個稀疏點`;
+ document.getElementById('filter-status').textContent=filterInput.checked?`已隱藏 ${(points.length-visible.length).toLocaleString()} 個可疑點；依觀測次數、重投影誤差與鄰近密度篩選，原始三維點皆保留。`:'目前顯示全部原始三維點。';
+}
+canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.008;pitch+=(e.clientY-drag[1])*.008;drag=[e.clientX,e.clientY];draw()});
+canvas.addEventListener('pointerup',()=>drag=null);canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.05,Math.min(30,zoom*Math.exp(-e.deltaY*.001)));draw()},{passive:false});
+document.getElementById('reset').onclick=()=>{yaw=.3;pitch=-.6;zoom=1;draw()};window.addEventListener('resize',draw);draw();
+filterInput.addEventListener('change',draw);cameraInput.addEventListener('change',draw);
+</script>
+</html>
