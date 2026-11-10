@@ -6,9 +6,10 @@
 <title>Overlap｜貼圖模型與表面修整</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#101820;color:#e7edf2;font:15px system-ui,sans-serif}header{padding:20px 24px;background:#17232d}h1{font-size:23px;margin:0 0 12px}.controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap}label{display:flex;gap:8px;align-items:center}button,select,a{background:#25443e;color:white;border:1px solid #578b7f;padding:8px 12px;border-radius:5px;text-decoration:none;font:inherit}p{color:#b5c5d1;line-height:1.6;margin:12px 0 0}#view{height:72vh;min-height:360px}#view canvas{display:block;touch-action:none}#status{color:#82dfc3}footer{padding:12px 24px;color:#b5c5d1}.error{color:#ffb4a8!important}
+.linked header{padding:12px 16px}.linked h1{font-size:18px}.linked header p:not(.error),.linked footer,.linked header a{display:none}.linked #view{height:calc(100vh - 140px);min-height:300px}a[hidden]{display:none}
 </style>
 <header><h1>PhotoGroup-132 · 表面與貼圖</h1>
-<div class="controls"><label>檢視<select id="mode"><option value="texture">貼圖模型</option><option value="solid">表面白模</option><option value="original">原始點雲＋表面</option><option value="repaired">貼回表面點雲＋表面</option></select></label><label><input id="highlight" type="checkbox" checked>標示修整點</label><button id="reset">重設視角</button><a href="model.glb" download>下載貼圖模型</a><a href="points_surface_repaired.ply" download>下載修整點雲</a></div>
+<div class="controls"><label>檢視<select id="mode"><option value="texture">貼圖模型</option><option value="solid">表面白模</option><option value="original">原始點雲＋表面</option><option value="repaired">貼回表面點雲＋表面</option></select></label><label><input id="highlight" type="checkbox" checked>標示修整點</label><button id="reset">重設視角</button><a id="download-model" href="model.glb" download>下載貼圖模型</a><a id="download-points" href="points_surface_repaired.ply" download>下載修整點雲</a><a id="compare-link" href="comparison.html" hidden>前後比較</a></div>
 <p>拖曳旋轉，滾輪縮放，右鍵拖曳平移。修整版本只將可疑點貼至最近三角面；原始重建與建物高度保留。</p><p id="status" role="status">正在載入貼圖模型…</p></header>
 <div id="view" role="img" aria-label="可旋轉的實際照片貼圖模型與點雲比較"></div>
 <footer>比例尺與世界座標尚未校正。點貼回表面是視覺修整，不代表精度提高；表面缺漏、動態水面或照片未涵蓋的區域仍可能失真。</footer>
@@ -18,13 +19,20 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const host=document.getElementById('view'),status=document.getElementById('status'),mode=document.getElementById('mode');
+const params=new URLSearchParams(location.search),baselineView=params.get('version')==='baseline',linked=params.get('sync')==='1';
+if(linked)document.body.classList.add('linked');
 try {
  const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(host.clientWidth,host.clientHeight);host.appendChild(renderer.domElement);
  const scene=new THREE.Scene();scene.background=new THREE.Color('#101820');
  const camera=new THREE.PerspectiveCamera(45,host.clientWidth/host.clientHeight,.01,10000);camera.up.set(0,0,1);
- const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=!linked;
  scene.add(new THREE.HemisphereLight(0xffffff,0x707080,2));const light=new THREE.DirectionalLight(0xffffff,2);light.position.set(1,-2,4);scene.add(light);
- const [gltf,points,report]=await Promise.all([new GLTFLoader().loadAsync('./model.glb'),fetch('./points.json').then(r=>{if(!r.ok)throw Error('無法讀取點雲');return r.json()}),fetch('./surface_report.json').then(r=>{if(!r.ok)throw Error('無法讀取結果報告');return r.json()})]);
+ const modelFile=baselineView?'baseline_model.glb':'model.glb',pointFile=baselineView?'baseline_points.json':'points.json';
+ const [gltf,points,report]=await Promise.all([new GLTFLoader().loadAsync('./'+modelFile),fetch('./'+pointFile).then(r=>{if(!r.ok)throw Error('無法讀取點雲');return r.json()}),fetch('./surface_report.json').then(r=>{if(!r.ok)throw Error('無法讀取結果報告');return r.json()})]);
+ const display=baselineView?report.baseline:report;if(!display)throw Error('找不到原始版本資料');
+ document.getElementById('download-model').href=modelFile;document.getElementById('download-points').href=baselineView?'baseline_points_surface_repaired.ply':'points_surface_repaired.ply';
+ document.getElementById('compare-link').hidden=!report.baseline||linked;
+ if(report.baseline)document.querySelector('h1').textContent=baselineView?'表面細化前':'表面細化後';
  const group=new THREE.Group();scene.add(group);const model=gltf.scene;group.add(model);
  if(report.view_transform){const t=report.view_transform;group.matrix.set(...t);group.matrixAutoUpdate=false;}
  const surfaces=[];model.traverse(o=>{if(o.isMesh){const originals=Array.isArray(o.material)?o.material:[o.material];for(const m of originals){m.side=THREE.DoubleSide;}surfaces.push({mesh:o,original:o.material,solid:new THREE.MeshStandardMaterial({color:0xc9d4d9,side:THREE.DoubleSide,roughness:1}),ghost:new THREE.MeshBasicMaterial({color:0x8da3ad,side:THREE.DoubleSide,transparent:true,opacity:.18,depthWrite:false})});}});
@@ -34,10 +42,11 @@ try {
  const reset=()=>{camera.position.copy(center).add(new THREE.Vector3(.55,-.85,.9).multiplyScalar(extent));camera.near=extent/10000;camera.far=extent*100;camera.updateProjectionMatrix();controls.target.copy(center);controls.update();};reset();
  function update(){const value=mode.value,cloud=value==='original'||value==='repaired';document.getElementById('highlight').disabled=!cloud;original.visible=value==='original';repaired.visible=value==='repaired';for(const item of surfaces)item.mesh.material=cloud?item.ghost:value==='solid'?item.solid:item.original;
   for(const object of [original,repaired]){const colors=object.geometry.attributes.color;for(let i=0;i<points.colors.length;i++){const highlighted=points.suspect[i]&&document.getElementById('highlight').checked;const rgb=highlighted?[255,170,70]:points.colors[i];colors.setXYZ(i,rgb[0]/255,rgb[1]/255,rgb[2]/255);}colors.needsUpdate=true;}
-  status.textContent=`${report.mesh.vertices.toLocaleString()} 個頂點 · ${report.mesh.faces.toLocaleString()} 個面 · ${report.point_repair.projected_points.toLocaleString()} 個可疑點已另存表面投影版本`;}
+  status.textContent=`${display.mesh.vertices.toLocaleString()} 個頂點 · ${display.mesh.faces.toLocaleString()} 個面 · ${display.point_repair.projected_points.toLocaleString()} 個可疑點已另存表面投影版本`;}
  mode.addEventListener('change',update);document.getElementById('highlight').addEventListener('change',update);document.getElementById('reset').addEventListener('click',reset);update();
  new ResizeObserver(()=>{const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}).observe(host);
  renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
+ if(linked&&window.parent!==window){let receiving=false;const send=()=>{if(!receiving)window.parent.postMessage({type:'overlap-camera',position:camera.position.toArray(),target:controls.target.toArray()},location.origin);};controls.addEventListener('change',send);window.addEventListener('message',e=>{if(e.source!==window.parent||e.origin!==location.origin)return;if(e.data?.type==='overlap-request-camera'){send();return;}if(e.data?.type!=='overlap-camera'||![e.data.position,e.data.target].every(a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite)))return;receiving=true;camera.position.fromArray(e.data.position);controls.target.fromArray(e.data.target);controls.update();receiving=false;});window.parent.postMessage({type:'overlap-ready'},location.origin);}
 } catch(error){status.classList.add('error');status.textContent='模型載入失敗：'+error.message+'。請確認使用本機 HTTP 預覽網址，且瀏覽器支援 WebGL。';console.error(error);}
 </script>
 </html>

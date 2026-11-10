@@ -1,0 +1,15 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overlap｜表面細化前後比較</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101820;color:#e7edf2;font:15px system-ui,sans-serif}header{padding:20px 24px}h1{margin:0 0 10px;font-size:24px}p{line-height:1.7;color:#b5c5d1}main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}iframe{width:100%;min-width:0;height:80vh;min-height:480px;border:0;background:#101820}#metrics{line-height:1.7;color:#82dfc3}@media(max-width:900px){main{grid-template-columns:1fr}}
+</style>
+<header><h1>同一批照片 · 表面細化前後比較</h1><p>兩側視角同步，拖曳任一模型即可比較。細化使用原有照片與相機姿態，沒有新增控制點或 GPS 約束。</p><div id="metrics" role="status">正在讀取比較指標…</div><p>點到面的距離表示和既有稀疏點的一致程度，不代表實際測量精度。請一起檢視屋頂、階梯、岸壁與場景邊界。</p></header>
+<main><iframe id="before" title="表面細化前" src="preview.html?version=baseline&amp;sync=1"></iframe><iframe id="after" title="表面細化後" src="preview.html?sync=1"></iframe></main>
+<script>
+const before=document.getElementById('before'),after=document.getElementById('after'),ready=new Set();
+window.addEventListener('message',e=>{if(e.origin!==location.origin)return;const source=e.source===before.contentWindow?before:e.source===after.contentWindow?after:null;if(!source)return;if(e.data?.type==='overlap-ready'){ready.add(source);if(ready.size===2)after.contentWindow.postMessage({type:'overlap-request-camera'},location.origin);}else if(e.data?.type==='overlap-camera'&&[e.data.position,e.data.target].every(a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite))){(source===before?after:before).contentWindow.postMessage(e.data,location.origin);}});
+fetch('comparison.json').then(r=>{if(!r.ok)throw Error('無法讀取比較指標');return r.json();}).then(c=>{document.getElementById('metrics').textContent=`原始匹配點抽樣 ${c.landmark_sample_count} 點｜中位點到面距離占原始模型對角線：細化前 ${c.baseline.landmark_distance_median_percent_of_baseline_diagonal.toFixed(4)}%，細化後 ${c.refined.landmark_distance_median_percent_of_baseline_diagonal.toFixed(4)}%｜面數 ${c.baseline.faces.toLocaleString()} → ${c.refined.faces.toLocaleString()}`;}).catch(e=>{document.getElementById('metrics').textContent=e.message;});
+</script></html>
