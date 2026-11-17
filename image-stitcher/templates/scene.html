@@ -1,0 +1,64 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlap｜空拍 3D 場景</title>
+<link rel="stylesheet" href="{{ stylesheet }}"><link rel="stylesheet" href="{{ scene_stylesheet }}"></head>
+<body><main>
+<header><div class="brand">◈ OVERLAP <span>空拍 3D 場景</span></div><nav class="nav"><a href="{{ url_for('index') }}">← 影像對齊</a><span class="tag">LOCAL · CPU</span></nav></header>
+
+<section class="intro"><p class="eyebrow">VIDEO OR PHOTOS → TEXTURED 3D SCENE</p>
+<h1>環繞拍一圈，<br><em>從任何角度看。</em></h1>
+<p>上傳一段空拍影片或一組照片。系統自動挑選清晰影格、定位每張影像的相機位置，<br>再建立貼上真實照片的 3D 模型，可在瀏覽器中旋轉、縮放、平移檢視。</p></section>
+
+<section aria-labelledby="samples-title"><div class="section-heading"><h2 id="samples-title">範例空拍影片</h2><span>授權明確、可直接用來重建</span></div>
+<div class="scene-samples">
+{% for sample in samples %}
+<article class="scene-sample" data-available="{{ 'true' if sample.available else 'false' }}">
+<strong>{{ sample.label }}</strong><p>{{ sample.description }}</p>
+{% if sample.available %}<p class="source"><a href="{{ sample.page }}" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a> · {{ sample.license }}{% if sample.author %} · {{ sample.author }}{% endif %}</p>
+<button type="button" class="secondary" data-sample="{{ sample.id }}">用這段影片重建</button>
+{% else %}<p class="source">尚未下載：執行 <code>.venv\Scripts\python.exe download_scene_samples.py{% if sample.id == 'okulice' %} okulice{% endif %}</code></p>{% endif %}
+</article>
+{% endfor %}
+</div></section>
+
+<section aria-labelledby="upload-title"><div class="section-heading"><h2 id="upload-title">上傳自己的素材</h2><span>一段影片，或三張以上照片／照片 ZIP</span></div>
+<form id="scene-form">
+<label class="dropzone" id="dropzone"><input id="files" name="files" type="file" multiple accept="video/*,image/jpeg,image/png,.zip,.mp4,.mov,.webm,.mkv,.avi">
+<span class="drop-icon" aria-hidden="true">⬡</span><strong id="drop-title">選擇影片或照片，或拖放至此</strong><span id="drop-detail" class="muted">MP4／MOV／WebM 影片，或 JPG／PNG 照片；上限 4 GiB</span></label>
+<div class="scene-controls">
+<label>品質<select name="preset" id="preset">{% for key, preset in presets.items() %}<option value="{{ key }}"{% if key == 'standard' %} selected{% endif %}>{{ preset.label }}（{{ preset.frames }} 影格 · 深度圖 {{ preset.dense }} px）</option>{% endfor %}</select></label>
+<label class="video-only">影格數<input name="frames" id="frames" type="number" min="10" max="150" placeholder="依品質"></label>
+<label class="video-only">起始秒<input name="start" type="number" min="0" step="0.1" placeholder="0"></label>
+<label class="video-only">結束秒<input name="end" type="number" min="0" step="0.1" placeholder="結尾"></label>
+<button id="submit" type="submit">開始重建 <span>↗</span></button>
+</div>
+<p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+</form>
+<details class="tips"><summary>怎樣的影片適合建模？</summary><ul>
+<li><b>環繞目標拍攝</b>：以興趣點（POI）模式繞建物一圈，鏡頭朝下約 30°–60°；再高一圈拍屋頂更完整。</li>
+<li><b>慢而穩</b>：避免快速轉向與變焦；動態模糊的影格會被自動略過，但太多會造成缺洞。</li>
+<li><b>畫面重疊</b>：相鄰影格應看到大部分相同的場景。自動切片依相機實際移動量平均取樣，懸停片段不會重複取樣。</li>
+<li><b>避開</b>大面積天空、水面、反光玻璃、移動的車輛與人；片頭片尾字幕可用起始／結束秒略過。</li>
+<li>處理全在本機 CPU：快速預覽約數分鐘，標準品質的 1080p 影片可能需要 20–40 分鐘。</li>
+</ul></details></section>
+
+<section id="job-panel" class="job-panel" hidden aria-labelledby="job-title">
+<div class="job-head"><div><p class="eyebrow" id="job-kind"></p><h2 id="job-title"></h2><p class="muted" id="job-meta"></p></div>
+<div class="job-actions"><span id="job-badge" class="badge"></span><button type="button" id="cancel" class="danger" hidden>取消</button></div></div>
+<ol id="stages" class="stages"></ol>
+<p id="job-error" class="job-error" hidden></p>
+<ul id="job-warnings" class="job-warnings" hidden></ul>
+<div id="viewer-wrap" hidden>
+<iframe id="viewer" title="可旋轉的 3D 場景" allow="fullscreen"></iframe>
+<div class="viewer-links"><a id="open-full" target="_blank" rel="noopener">全頁開啟 3D 檢視器</a><a id="download-glb" download>下載貼圖模型 GLB</a><a id="download-ply" download>下載點雲 PLY</a><a id="open-sparse" target="_blank" rel="noopener">相機位置與稀疏點雲</a></div>
+<p class="muted">拖曳旋轉、滾輪縮放、右鍵拖曳平移。模型尺度與方位未經控制點校正，僅供檢視，不可作為量測成果。</p>
+</div>
+<details id="log-box" class="log-box"><summary>處理紀錄</summary><pre id="log"></pre></details>
+</section>
+
+<section aria-labelledby="history-title"><div class="section-heading"><h2 id="history-title">重建紀錄</h2><span>結果保存在本機 outputs\scenes</span></div>
+<ul id="history" class="history"><li class="muted">尚無紀錄。</li></ul></section>
+
+<footer>COLMAP 相機定位 · OpenMVS 密集重建與貼圖 · three.js 檢視。尺度與地理位置未校正；表面缺漏或浮動區域屬於純照片重建的限制。<span class="version"> · 版本 scene-1</span></footer>
+</main><script src="{{ javascript }}"></script></body></html>

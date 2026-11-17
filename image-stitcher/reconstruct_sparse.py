@@ -64,6 +64,18 @@ def prepare_images(source, destination):
     return records
 
 
+def cyclic_pairs(names, overlap):
+    """Pairs for time-ordered frames: near neighbours plus 2^k jumps, wrapping so an orbit closes."""
+    count = len(names)
+    offsets = set(range(1, min(overlap, count - 1) + 1))
+    jump = 2
+    while jump < count:
+        offsets.add(jump)
+        jump *= 2
+    pairs = {tuple(sorted((i, (i + offset) % count))) for i in range(count) for offset in offsets}
+    return [(names[i], names[j]) for i, j in sorted(pairs) if i != j]
+
+
 def summarize_model(model, model_id, records, destination):
     model_path = destination / "sparse" / str(model_id)
     model.write_text(model_path)
@@ -138,7 +150,12 @@ def main():
     parser.add_argument("--max-image-size", type=int, default=1600)
     parser.add_argument("--max-features", type=int, default=4096)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--sequential-overlap", type=int, default=0,
+                        help="For time-ordered video frames: match each frame with this many following frames "
+                             "(plus power-of-two jumps, wrapping around to close an orbit) instead of all pairs")
     args = parser.parse_args()
+    if args.sequential_overlap < 0:
+        parser.error("Sequential overlap cannot be negative")
     if min(args.max_image_size, args.max_features, args.threads) < 1:
         parser.error("Image size, feature limit and threads must be positive")
     if not args.photos.is_file():
@@ -157,6 +174,7 @@ def main():
               "pycolmap_version": pycolmap.__version__, "device": "cpu",
               "settings": {"max_image_size": args.max_image_size,
                            "max_features": args.max_features, "threads": args.threads,
+                           "sequential_overlap": args.sequential_overlap,
                            "camera_model": "SIMPLE_RADIAL", "random_seed": 0},
               "limitations": ["Sparse reconstruction only; no dense mesh or texture.",
                               "Scale and world coordinates are not calibrated.",
@@ -182,15 +200,26 @@ def main():
                                 "num_threads": args.threads, "use_gpu": False,
                                 "sift": {"max_num_features": args.max_features}},
             device=pycolmap.Device.cpu)
-        stage("match_exhaustive")
-        pycolmap.match_exhaustive(
-            database, matching_options={"num_threads": args.threads, "use_gpu": False},
-            device=pycolmap.Device.cpu)
+        matching_options = {"num_threads": args.threads, "use_gpu": False}
+        if args.sequential_overlap:
+            stage("match_sequential")
+            pairs = cyclic_pairs([r["image"] for r in records], args.sequential_overlap)
+            pair_list = output / "pairs.txt"
+            pair_list.write_text("".join(f"{a} {b}\n" for a, b in pairs), encoding="utf-8")
+            pycolmap.match_image_pairs(database, matching_options=matching_options,
+                                       pairing_options={"match_list_path": pair_list},
+                                       device=pycolmap.Device.cpu)
+            pair_count = len(pairs)
+        else:
+            stage("match_exhaustive")
+            pycolmap.match_exhaustive(database, matching_options=matching_options, device=pycolmap.Device.cpu)
+            pair_count = len(records) * (len(records) - 1) // 2
         with sqlite3.connect(database) as connection:
             report["matching"] = {
                 "feature_rows": connection.execute("SELECT SUM(rows) FROM keypoints").fetchone()[0],
                 "verified_pairs": connection.execute("SELECT COUNT(*) FROM two_view_geometries WHERE rows >= 15").fetchone()[0],
-                "possible_pairs": len(records) * (len(records) - 1) // 2}
+                "possible_pairs": pair_count,
+                "pairing": f"cyclic_sequential_{args.sequential_overlap}" if args.sequential_overlap else "exhaustive"}
         stage("incremental_mapping")
         sparse = output / "sparse"
         sparse.mkdir()

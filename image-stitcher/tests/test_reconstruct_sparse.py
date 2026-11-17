@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 import pytest
 
-from reconstruct_sparse import point_quality_mask, prepare_images
+from reconstruct_sparse import cyclic_pairs, point_quality_mask, prepare_images
 
 
 def photo(make="DJI", model="FC2204", size=(24, 18)):
@@ -66,3 +66,19 @@ def test_quality_filter_checks_observation_support_and_fit():
     keep, _ = point_quality_mask([[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                                   [.1, .2, 2], [4, 2, 5])
     assert keep.tolist() == [True, False, False]
+
+
+def test_cyclic_pairs_link_neighbours_and_close_the_orbit():
+    names = [f"f{i:02d}" for i in range(20)]
+    pairs = cyclic_pairs(names, 3)
+    as_index = {tuple(sorted((int(a[1:]), int(b[1:])))) for a, b in pairs}
+    assert len(pairs) == len(as_index)
+    assert {(0, 1), (0, 2), (0, 3), (0, 4), (0, 8), (0, 16)} <= as_index
+    assert (0, 19) in as_index and (0, 17) in as_index  # wrap-around closes a full orbit
+    assert (0, 5) not in as_index
+    assert len(pairs) < len(names) * (len(names) - 1) // 2
+
+
+def test_cyclic_pairs_never_pairs_an_image_with_itself():
+    pairs = cyclic_pairs(["a", "b", "c"], 10)
+    assert sorted(pairs) == [("a", "b"), ("a", "c"), ("b", "c")]

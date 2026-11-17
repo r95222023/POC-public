@@ -137,12 +137,74 @@ GLB 會嵌入原本分離的貼圖，下載單一檔案即可攜帶材質；引�
 
 `comparison.json` 對兩版使用同一批、固定亂數種子的最多 512 個原始可靠稀疏點，計算點到表面的中位距離與 P90，並記錄邊界邊、非流形邊和退化三角面數。比較不使用貼回表面後的點，以免循環評估。這些是幾何一致性診斷，不能代替真值精度；場景外邊界本來就可能有開口，距離變小或面數增加也不等於模型更正確。
 
+## 空拍影片／照片 → 3D 場景（網頁介面）
+
+`http://127.0.0.1:5000/scene` 可上傳**一段空拍影片**或**三張以上照片**（亦可上傳照片 ZIP），在本機依序完成自動切片、相機定位、密集重建、建立網格與貼圖，完成後直接在頁面內以 three.js 旋轉、縮放、平移檢視，並可下載 GLB 貼圖模型與點雲。
+
+安裝（Windows，首次）：
+
+```powershell
+.\setup.cmd --scene
+.\run.cmd
+```
+
+已安裝基本環境時，只需補裝重建工具與範例影片：
+
+```powershell
+.\.venv\Scripts\python.exe setup_photogrammetry.py --surface
+.\.venv\Scripts\python.exe download_scene_samples.py
+```
+
+### 自動切片
+
+`video_frames.py` 先以每秒約 6 張的密度解碼候選影格，用光流估計相鄰候選間的相機移動量，用 Laplacian 變異數衡量清晰度。接著把**累積移動量**平均切成 N 段，每段保留最清晰的一張；懸停或慢速段落不會產生大量重複影格，動態模糊的段落會被略過。移動量不足（例如定點拍攝）會直接拒絕並說明原因。也可單獨使用：
+
+```powershell
+.\.venv\Scripts\python.exe video_frames.py flight.mp4 --output frames.zip --frames 60 --start 3 --end 90
+```
+
+輸出的 ZIP 可直接交給 `reconstruct_sparse.py`。同一段影片的影格沒有 EXIF，會共用一組相機內參，符合單一相機拍攝的情況。照片上傳則先依 EXIF 方向轉正，保留廠牌、型號與焦距標籤。
+
+### 範例影片
+
+`download_scene_samples.py` 從 Wikimedia Commons 下載授權明確的環繞空拍影片（Commons 不允許程式下載原檔，因此取用其公開的 VP9 轉檔，最高 1080p），並在 `data/scene-samples/sources.json` 記錄來源頁、作者、授權與 SHA-256。影片不隨本儲存庫發布。
+
+| 代號 | 影片 | 授權 | 用途 |
+|---|---|---|---|
+| `oubiels` | [Notre Dame des Oubiels drone](https://commons.wikimedia.org/wiki/File:Notre_Dame_des_Oubiels_drone.webm)，480p · 20 秒 | CC0 | 小檔案，數分鐘內驗證整個流程 |
+| `seacroft` | [Drone footage of St James' Church, Seacroft](https://commons.wikimedia.org/wiki/File:Drone_footage_of_St_James%27_Church,_Seacroft.webm)，1080p · 94 秒 | CC0 | 興趣點環繞，完整教堂模型 |
+| `okulice` | [Okulice - kościół (360 stopni)](https://commons.wikimedia.org/wiki/File:Okulice_-_ko%C5%9Bci%C3%B3%C5%82_(360_stopni).webm)，1080p 轉檔 · 104 秒 | CC BY 4.0 | 選用；`download_scene_samples.py okulice`，發布成果須標示作者 |
+
+### 處理與限制
+
+- 同時只處理一個工作，其餘排隊；每個步驟是獨立程序，可從頁面取消（會一併結束 OpenMVS 程式）。伺服器重新啟動時，執行中的工作會標為中斷，需重新上傳。
+- 結果保存在 `outputs/scenes/<工作代號>/`：`input/` 原始上傳、`images.zip` 切片或整理後的照片、`sparse/` COLMAP 模型與稀疏預覽、`sparse/surface/` 貼圖模型 `model.glb` 與檢視器、`logs/` 各步驟紀錄。頁面上的「刪除」會移除整個資料夾。
+- 品質設定：「快速預覽」40 影格、深度圖 512 px；「標準」70 影格、深度圖 640 px。全在 CPU 執行，時間取決於影格數與解析度。
+- 影片影格依時間排序，因此改用「相鄰影格配對」：每張只與後 10 張及 2、4、8… 張之後的影格配對，並首尾相接以閉合環繞航線，配對數約為兩兩配對的三分之一；照片仍使用兩兩配對。
+- 檢視器預設對準相機光軸的最近交會點（環繞拍攝的主體），從航線方向觀看；直線航拍等光軸不交會的情況改用整體範圍。按「重設視角」可回到此視角。
+
+2026-11-17 在 Intel i5-7400（4 核）、8 GB RAM、無獨立顯示卡的 Windows 11 實測（標準設定，4 執行緒）：
+
+| 範例 | 影格 | 定位成功 | 稀疏點 | 三角面 | 總時間 |
+|---|---:|---:|---:|---:|---:|
+| `oubiels` 480p · 20 秒 | 37 | 35 | 6,686 | 99,906 | 6 分 |
+| `seacroft` 1080p · 94 秒 | 70 | 70 | 32,044 | 99,892 | 14 分 45 秒 |
+
+Seacroft 處理期間系統可用記憶體最低約 0.3 GB；8 GB 電腦請在重建時關閉其他大型程式，或改用「快速預覽」。
+- 單次上傳上限 4 GiB。影片建議 H.264／H.265 MP4 或 VP9 WebM；部分 AV1 影片可能無法以 OpenCV 解碼。
+- 尺度、方位與地理位置未經控制點校正，不能當作量測成果。水面、大片天空、反光玻璃、移動物體與視角不足的區域可能出現破洞或浮動表面。
+
+API：`POST /api/scenes`（multipart：`files` 可重複，或 `sample=<代號>`；`preset`、`frames`、`start`、`end` 選填）、`GET /api/scenes`、`GET /api/scenes/<id>`、`POST /api/scenes/<id>/cancel`、`DELETE /api/scenes/<id>`；結果檔案在 `/scenes/<id>/view/…`。
+
 ## 驗證
 
 ```bash
 .venv/bin/python -m pytest -q
 node --check static/app.js
+node --check static/scene.js
 .venv/bin/python -m pip check
 ```
+
+3D 場景相關測試以合成影片驗證「依移動量取樣、略過懸停與模糊影格」，並以假步驟驗證工作佇列的階段回報、取消、失敗訊息、重啟中斷、超過 32 MB 的影片上傳及結果路徑限制；實際 COLMAP／OpenMVS 重建以範例影片端到端執行驗證。
 
 既有測試包含外點干擾下的三模型估算、旋轉／縮放／曝光／裁切、四方向座標還原、空白圖拒絕、投影奇點拒絕、黑色有效像素及 HTTP 上傳與錯誤處理。CNN 實際推論由 benchmark 驗證，不會在單元測試時偷偷下載模型。

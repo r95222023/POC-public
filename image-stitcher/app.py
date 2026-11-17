@@ -10,9 +10,11 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from flask import Flask, jsonify, render_template, request, send_file, url_for
 from align import AlignmentError, MAX_SIDE, align, render
 from samples import SAMPLES, available, image_for
+from scene_routes import scenes
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
+app.register_blueprint(scenes)
 Image.MAX_IMAGE_PIXELS = 40_000_000
 work_lock = threading.Lock()
 

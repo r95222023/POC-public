@@ -92,6 +92,37 @@ def viewer_assets(destination):
         shutil.copyfile(cache / relative, target)
 
 
+def camera_focus(model):
+    """Point the cameras aim at (least-squares nearest point to all optical axes).
+
+    For an orbit or point-of-interest flight this is the subject, which lets the viewer
+    open on it instead of on the bounding box of distant terrain. Returns None when the
+    axes are nearly parallel (e.g. a straight flyover) or the point lies behind the cameras.
+    """
+    images = [image for image in model.images.values() if image.has_pose]
+    if len(images) < 3:
+        return None
+    centers = np.array([image.projection_center() for image in images])
+    directions = np.array([image.viewing_direction() for image in images])
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    normal = np.zeros((3, 3))
+    target = np.zeros(3)
+    for center, direction in zip(centers, directions):
+        projector = np.eye(3) - np.outer(direction, direction)
+        normal += projector
+        target += projector @ center
+    if np.linalg.eigvalsh(normal)[0] < .05 * len(images):
+        return None
+    point = np.linalg.solve(normal, target)
+    ahead = np.einsum("ij,ij->i", point - centers, directions)
+    if np.mean(ahead > 0) < .8:
+        return None
+    offset = np.mean(centers - point, axis=0)
+    return {"center": point.tolist(),
+            "camera_distance": float(np.median(np.linalg.norm(centers - point, axis=1))),
+            "camera_direction": (offset / (np.linalg.norm(offset) or 1)).tolist()}
+
+
 def project_suspect_points(model, mesh):
     points = list(model.points3D.values())
     xyz = np.array([p.xyz for p in points])
@@ -265,6 +296,9 @@ def main():
         view_transform[:3, :3] = basis
         view_transform[:3, 3] = -basis @ center
         report["view_transform"] = view_transform.reshape(-1).tolist()
+        focus = camera_focus(model)
+        if focus:
+            report["focus"] = focus
         if report.get("baseline"):
             reference = json.loads((Path(report["baseline"]["path"]) / "surface_report.json").read_text(encoding="utf-8"))
             report["view_transform"] = reference["view_transform"]

@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parent
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sift-only', action='store_true', help='Skip PyTorch and CNN weights')
+    parser.add_argument('--scene', action='store_true',
+                        help='Also install COLMAP/OpenMVS and sample drone videos for the 3D scene page')
     args = parser.parse_args()
     if os.name != 'nt' or sys.version_info[:2] != (3, 12) or struct.calcsize('P') != 8:
         raise SystemExit('Run setup.cmd with Windows Python 3.12 x64.')
@@ -35,6 +37,9 @@ def main():
         run('-m', 'pip', 'install', '-r', 'requirements-learned.txt')
         run('learned.py')
     run('download_samples.py')
+    if args.scene:
+        run('setup_photogrammetry.py', '--surface')
+        run('download_scene_samples.py')
     run('-m', 'pip', 'check')
     run('-m', 'pytest', '-q')
 

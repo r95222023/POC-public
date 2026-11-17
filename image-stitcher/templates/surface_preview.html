@@ -3,12 +3,13 @@
 <html lang="zh-Hant">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Overlap｜貼圖模型與表面修整</title>
+<title>Overlap｜3D 場景</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#101820;color:#e7edf2;font:15px system-ui,sans-serif}header{padding:20px 24px;background:#17232d}h1{font-size:23px;margin:0 0 12px}.controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap}label{display:flex;gap:8px;align-items:center}button,select,a{background:#25443e;color:white;border:1px solid #578b7f;padding:8px 12px;border-radius:5px;text-decoration:none;font:inherit}p{color:#b5c5d1;line-height:1.6;margin:12px 0 0}#view{height:72vh;min-height:360px}#view canvas{display:block;touch-action:none}#status{color:#82dfc3}footer{padding:12px 24px;color:#b5c5d1}.error{color:#ffb4a8!important}
 .linked header{padding:12px 16px}.linked h1{font-size:18px}.linked header p:not(.error),.linked footer,.linked header a{display:none}.linked #view{height:calc(100vh - 140px);min-height:300px}a[hidden]{display:none}
+.embed header{padding:10px 14px}.embed h1,.embed header p:not(.error),.embed footer,.embed header a{display:none}.embed #view{height:calc(100vh - 60px);min-height:260px}
 </style>
-<header><h1>PhotoGroup-132 · 表面與貼圖</h1>
+<header><h1>3D 場景 · 表面與貼圖</h1>
 <div class="controls"><label>檢視<select id="mode"><option value="texture">貼圖模型</option><option value="solid">表面白模</option><option value="original">原始點雲＋表面</option><option value="repaired">貼回表面點雲＋表面</option></select></label><label><input id="highlight" type="checkbox" checked>標示修整點</label><button id="reset">重設視角</button><a id="download-model" href="model.glb" download>下載貼圖模型</a><a id="download-points" href="points_surface_repaired.ply" download>下載修整點雲</a><a id="compare-link" href="comparison.html" hidden>前後比較</a></div>
 <p>拖曳旋轉，滾輪縮放，右鍵拖曳平移。修整版本只將可疑點貼至最近三角面；原始重建與建物高度保留。</p><p id="status" role="status">正在載入貼圖模型…</p></header>
 <div id="view" role="img" aria-label="可旋轉的實際照片貼圖模型與點雲比較"></div>
@@ -21,6 +22,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const host=document.getElementById('view'),status=document.getElementById('status'),mode=document.getElementById('mode');
 const params=new URLSearchParams(location.search),baselineView=params.get('version')==='baseline',linked=params.get('sync')==='1';
 if(linked)document.body.classList.add('linked');
+if(!linked&&params.get('embed')==='1')document.body.classList.add('embed');
 try {
  const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(host.clientWidth,host.clientHeight);host.appendChild(renderer.domElement);
  const scene=new THREE.Scene();scene.background=new THREE.Color('#101820');
@@ -39,7 +41,14 @@ try {
  const makeCloud=coordinates=>{const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(coordinates.flat(),3));geometry.setAttribute('color',new THREE.Float32BufferAttribute(points.colors.flat().map(c=>c/255),3));const object=new THREE.Points(geometry,new THREE.PointsMaterial({size:2,sizeAttenuation:false,vertexColors:true}));object.visible=false;group.add(object);return object;};
  const original=makeCloud(points.original),repaired=makeCloud(points.repaired);
  group.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(model),center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());const extent=Math.max(size.x,size.y,size.z)||1;
- const reset=()=>{camera.position.copy(center).add(new THREE.Vector3(.55,-.85,.9).multiplyScalar(extent));camera.near=extent/10000;camera.far=extent*100;camera.updateProjectionMatrix();controls.target.copy(center);controls.update();};reset();
+ const focus=report.focus;
+ const reset=()=>{
+  if(focus){// Open on what the drone circled, from roughly where it flew, not on the whole terrain.
+   const target=new THREE.Vector3(...focus.center).applyMatrix4(group.matrixWorld),rotation=new THREE.Matrix3().setFromMatrix4(group.matrixWorld);
+   const direction=new THREE.Vector3(...focus.camera_direction).applyMatrix3(rotation).normalize();
+   camera.position.copy(target).addScaledVector(direction,focus.camera_distance*1.15);camera.near=focus.camera_distance/1000;camera.far=extent*100;controls.target.copy(target);
+  }else{camera.position.copy(center).add(new THREE.Vector3(.55,-.85,.9).multiplyScalar(extent));camera.near=extent/10000;camera.far=extent*100;controls.target.copy(center);}
+  camera.updateProjectionMatrix();controls.update();};reset();
  function update(){const value=mode.value,cloud=value==='original'||value==='repaired';document.getElementById('highlight').disabled=!cloud;original.visible=value==='original';repaired.visible=value==='repaired';for(const item of surfaces)item.mesh.material=cloud?item.ghost:value==='solid'?item.solid:item.original;
   for(const object of [original,repaired]){const colors=object.geometry.attributes.color;for(let i=0;i<points.colors.length;i++){const highlighted=points.suspect[i]&&document.getElementById('highlight').checked;const rgb=highlighted?[255,170,70]:points.colors[i];colors.setXYZ(i,rgb[0]/255,rgb[1]/255,rgb[2]/255);}colors.needsUpdate=true;}
   status.textContent=`${display.mesh.vertices.toLocaleString()} 個頂點 · ${display.mesh.faces.toLocaleString()} 個面 · ${display.point_repair.projected_points.toLocaleString()} 個可疑點已另存表面投影版本`;}

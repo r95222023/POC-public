@@ -24,6 +24,8 @@ cd G:\POC\image-stitcher
 3. 網址為 `http://127.0.0.1:5000/`。這次程式確實在你的 Windows 電腦上執行，該位址才指向這個 POC。
 4. 使用期間保留啟動的命令視窗；按 `Ctrl+C` 停止。重複開啟啟動器時會先檢查是否已有同版服務。
 
+要使用「空拍 3D 場景」頁面，安裝時改用 `setup.cmd --scene`：另外安裝 COLMAP（pycolmap）、官方 OpenMVS 2.4.0 CPU 發行檔，並下載兩段 CC0 環繞空拍範例影片。啟動後開啟 `http://127.0.0.1:5000/scene`，上傳影片或照片即可。已安裝基本環境者可只執行 `.venv\Scripts\python.exe setup_photogrammetry.py --surface` 與 `.venv\Scripts\python.exe download_scene_samples.py`。重建全在 CPU 上執行，處理期間請保持命令視窗開啟；8 GB 記憶體建議使用預設的影格數與品質。
+
 只想先測 SIFT，可在命令列使用 `setup.cmd --sift-only`，進入網站後選 SIFT；CNN 比較需要完整版安裝。首次完整安裝需下載大型 PyTorch 套件和模型，時間依網路而定。
 
 範例資料限學術研究、禁止商用，安裝時從作者來源下載；不包含在 Git 或來源 ZIP。來源 URL／SHA-256 記錄在 `data\levir\sources.json`。
