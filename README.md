@@ -2,6 +2,8 @@
 
 [image-stitcher](image-stitcher/README.md)：兩張圖片的局部特徵匹配、幾何對齊與拼接預覽。支援 SIFT 與 SuperPoint＋LightGlue 比較，附公開跨時間遙測影像的[實測記錄](image-stitcher/BENCHMARK.md)。
 
+[ocr-web](ocr-web/README.md)：公文與圖片 OCR 混合辨識工作台。結合本地 RapidOCR（PP-OCRv6）、OpenCV 印章與手寫日期 ROI 自動偵測，以及可選的 Ollama 視覺模型交叉校對，支援離線純本地 OCR 模式與結構化蓋章日期解析。進入 `ocr-web` 執行 `setup.cmd` 與 `run.cmd`，啟動後開啟 `http://127.0.0.1:8765/`。
+
 Windows 本機使用：安裝 Python 3.12 x64 及 Git，將本儲存庫放在 `G:\POC`，進入 `image-stitcher` 執行 `setup.cmd`，完成後執行 `run.cmd`。詳見 [Windows 部署說明](image-stitcher/README-WINDOWS.md)。
 
 [空拍 3D 場景網頁](image-stitcher/README.md#空拍影片照片--3d-場景網頁介面)：上傳一段環繞空拍影片或一組照片，自動挑選清晰影格、定位相機、建立貼圖模型，並在瀏覽器中自由旋轉檢視。安裝時執行 `setup.cmd --scene`，啟動後開啟 `http://127.0.0.1:5000/scene`。

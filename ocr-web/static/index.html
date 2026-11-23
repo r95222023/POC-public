@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公文與圖片 OCR 混合辨識工作台</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #0f766e;
+      --primary-hover: #0d9488;
+      --primary-soft: #ccfbf1;
+      --accent: #ea580c;
+      --accent-soft: #ffedd5;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+      --warn: #d97706;
+      --warn-soft: #fef3c7;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-badge {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .brand small {
+      display: block;
+      color: #94a3b8;
+      font-size: 12px;
+    }
+    .ollama-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .ollama-bar input {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      width: 235px;
+      font-family: Consolas, monospace;
+    }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 7px;
+      padding: 7px 13px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn:hover { background: var(--surface-2); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-dark {
+      background: #1e293b;
+      color: #f8fafc;
+      border-color: #334155;
+    }
+    .btn-dark:hover { background: #334155; }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      width: 100%;
+      justify-content: center;
+      padding: 11px 16px;
+      font-size: 15px;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .status-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #334155;
+      color: #e2e8f0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .status-pill.ok { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+    .status-pill.ok .dot { background: #10b981; }
+    .status-pill.err { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .status-pill.err .dot { background: #ef4444; }
+
+    .layout {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1040px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text);
+    }
+
+    .dropzone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 10px;
+      background: var(--surface-2);
+      padding: 20px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: #f0fdfa;
+    }
+    .dropzone p { margin: 4px 0; font-size: 13px; color: var(--muted); }
+    .dropzone strong { color: var(--text); font-size: 14px; }
+    .preview-box {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0f172a;
+      display: none;
+    }
+    .preview-box img {
+      width: 100%;
+      max-height: 240px;
+      object-fit: contain;
+      display: block;
+    }
+    .preview-meta {
+      background: var(--surface-2);
+      padding: 7px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+    }
+    .sample-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .sample-btn {
+      font-size: 12px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      color: var(--text);
+    }
+    .sample-btn:hover { background: #e2e8f0; }
+
+    .field { margin-top: 12px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 5px;
+    }
+    .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 13px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: #334155;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    .check-row input { margin-top: 3px; }
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 760px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    .kpi .k-label { font-size: 12px; color: var(--muted); }
+    .kpi .k-val { font-size: 20px; font-weight: 700; margin-top: 2px; }
+    .kpi .k-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .banner {
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 14px;
+      display: none;
+    }
+    .banner.warn {
+      background: var(--warn-soft);
+      border: 1px solid #fcd34d;
+      color: #92400e;
+    }
+    .banner.info {
+      background: var(--blue-soft);
+      border: 1px solid #93c5fd;
+      color: #1e40af;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      border: none;
+      background: transparent;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .section-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+      background: var(--surface-2);
+    }
+    .section-box h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stamp-list {
+      display: grid;
+      gap: 8px;
+    }
+    .stamp-item {
+      background: var(--surface);
+      border: 1px solid #fed7aa;
+      border-left: 4px solid var(--accent);
+      border-radius: 7px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .stamp-date {
+      font-size: 16px;
+      font-weight: 700;
+      color: #9a3412;
+      font-family: Consolas, "Microsoft JhengHei", monospace;
+    }
+    .kv-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 720px) { .kv-grid { grid-template-columns: 1fr; } }
+    .kv-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .kv-item .kv-k { font-size: 11px; color: var(--muted); }
+    .kv-item .kv-v { font-size: 13px; font-weight: 600; margin-top: 2px; word-break: break-word; }
+
+    .text-output {
+      background: #0f172a;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: Consolas, "Microsoft JhengHei", monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 540px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+    .light-pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 520px;
+      overflow-y: auto;
+      line-height: 1.65;
+    }
+    .roi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .roi-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .roi-card img {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      display: block;
+    }
+    .roi-card .roi-meta {
+      padding: 10px;
+      font-size: 12px;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .pill-orange { background: var(--accent-soft); color: #9a3412; }
+    .pill-blue { background: var(--blue-soft); color: #1d4ed8; }
+    .pill-teal { background: var(--primary-soft); color: #115e59; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--surface-2); font-size: 12px; color: var(--muted); position: sticky; top: 0; }
+    .table-wrap { max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 70px 20px;
+      color: var(--muted);
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .search-input {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      width: 240px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="brand-badge">OCR HUB</span>
+      <div>
+        <h1>公文與圖片 OCR 混合辨識工作台</h1>
+        <small>RapidOCR (PP-OCRv6) × OpenCV 印章自動定位 × Ollama VLM 交叉校對</small>
+      </div>
+    </div>
+    <div class="ollama-bar">
+      <input id="ollamaUrl" type="text" value="http://127.0.0.1:11434" aria-label="Ollama Server URL" />
+      <button id="checkOllamaBtn" class="btn btn-dark" type="button">檢測連線</button>
+      <span id="ollamaStatus" class="status-pill"><span class="dot"></span>尚未檢測</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left Controls -->
+    <section class="card">
+      <h2 class="card-title">1. 上傳圖片或貼上截圖</h2>
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <input id="fileInput" type="file" accept="image/*" hidden />
+        <strong>點擊選擇圖片、拖曳到此處，或按 Ctrl+V 貼上</strong>
+        <p>支援 PNG / JPG / WEBP / BMP（建議清楚單頁公文或截圖）</p>
+      </div>
+
+      <div id="previewBox" class="preview-box">
+        <img id="previewImg" alt="上傳圖片預覽" />
+        <div class="preview-meta">
+          <span id="previewName">-</span>
+          <span id="previewDim">-</span>
+        </div>
+      </div>
+
+      <div class="sample-row">
+        <span style="font-size:12px;color:var(--muted);align-self:center;">範例測試：</span>
+        <button class="sample-btn" type="button" data-sample="/samples/sample_official_clean.png" data-name="sample_official_clean.png">清晰公文</button>
+        <button class="sample-btn" type="button" data-sample="/samples/sample_official_scanned.png" data-name="sample_official_scanned.png">掃描件＋紅章</button>
+        <button class="sample-btn" type="button" data-sample="/samples/sample_ui_drawer.png" data-name="sample_ui_drawer.png">高密度系統截圖</button>
+      </div>
+
+      <h2 class="card-title" style="margin-top:18px;">2. 辨識管線設定</h2>
+
+      <div class="field">
+        <label for="modeSelect">執行模式</label>
+        <select id="modeSelect">
+          <option value="hybrid" selected>混合管線：RapidOCR + 印章定位 + Ollama VLM（推薦）</option>
+          <option value="ocr_only">僅本地開源 OCR + 印章自動定位（離線極速）</option>
+          <option value="vlm_only">僅 Ollama VLM（不附開源 OCR，純模型對照）</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="taskSelect">辨識任務</label>
+        <select id="taskSelect">
+          <option value="doc_full" selected>公文整合解析（欄位 + 蓋章日期 + 逐字校對）</option>
+          <option value="stamp_only">專注擷取蓋章／戳記日期（區分印刷日期）</option>
+          <option value="general_ocr">一般圖片／表格／截圖逐字 OCR</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="modelSelect">Ollama 視覺模型</label>
+        <select id="modelSelect">
+          <option value="gemma4:26b" selected>gemma4:26b（推薦：速度最快、公文表現最穩）</option>
+          <option value="gemma4:31b">gemma4:31b（較慢、偶發字元猜測）</option>
+          <option value="qwen3.5:35b">qwen3.5:35b（小字與繁體精準度高）</option>
+          <option value="gemma4:e4b">gemma4:e4b（僅在混合模式當純文字 OCR 校對）</option>
+        </select>
+        <div class="hint">提示：若遠端 Ollama 無法連線，系統仍會保留並回傳完整的本地 RapidOCR 與印章裁切結果。</div>
+      </div>
+
+      <label class="check-row">
+        <input id="includeRoiCheck" type="checkbox" checked />
+        <span>多圖附上 OpenCV 自動放大印章 ROI（可抓出小印章／手寫日期）</span>
+      </label>
+
+      <label class="check-row">
+        <input id="thinkCheck" type="checkbox" />
+        <span>開啟 Thinking 深度思考（對模糊掃描有幫助，但耗時增加 4–9 倍）</span>
+      </label>
+
+      <div style="margin-top:16px;">
+        <button id="runBtn" class="btn btn-primary" type="button" disabled>開始執行完整 OCR 辨識</button>
+      </div>
+      <div id="runProgress" class="hint" style="text-align:center;margin-top:8px;">請先上傳或選擇一張範例圖片</div>
+    </section>
+
+    <!-- Right Output -->
+    <section>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="k-label">總耗時</div>
+          <div id="kpiTotal" class="k-val">—</div>
+          <div id="kpiSubTime" class="k-sub">OCR — / VLM —</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">開源 OCR 偵測</div>
+          <div id="kpiLines" class="k-val">—</div>
+          <div id="kpiConf" class="k-sub">平均信心度 —</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">自動印章 ROI</div>
+          <div id="kpiRois" class="k-val">—</div>
+          <div class="k-sub">HSV 印泥 + 關鍵字定位</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">AI 校對狀態</div>
+          <div id="kpiVlm" class="k-val">—</div>
+          <div id="kpiTokens" class="k-sub">Model —</div>
+        </div>
+      </div>
+
+      <div id="errorBanner" class="banner warn"></div>
+      <div id="infoBanner" class="banner info"></div>
+
+      <div class="card">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="tab-summary" type="button">綜合解析與蓋章日期</button>
+          <button class="tab-btn" data-tab="tab-visual" type="button">印章定位與偵測疊圖</button>
+          <button class="tab-btn" data-tab="tab-ocr" type="button">開源 OCR 逐行明細</button>
+          <button class="tab-btn" data-tab="tab-raw" type="button">Prompt 與原始 JSON</button>
+        </div>
+
+        <div id="emptyState" class="empty-state">
+          <strong style="font-size:16px;color:var(--text);">尚未執行辨識</strong>
+          <p>在左側上傳公文、收據或系統截圖後，點擊「開始執行完整 OCR 辨識」，即可查看結構化蓋章日期、逐字校對全文與印章放大定位圖。</p>
+        </div>
+
+        <!-- Tab 1: Summary -->
+        <div id="tab-summary" class="tab-panel active" style="display:none;">
+          <div id="stampSection" class="section-box">
+            <h3>
+              <span>蓋章／戳記日期擷取結果</span>
+              <span id="stampBadge" class="pill pill-orange">—</span>
+            </h3>
+            <div id="stampContainer" class="stamp-list"></div>
+          </div>
+
+          <div id="docFieldsSection" class="section-box" style="display:none;">
+            <h3>
+              <span>公文基本欄位（印刷內容）</span>
+              <span class="pill pill-blue">區別於蓋章日期</span>
+            </h3>
+            <div id="docFieldsGrid" class="kv-grid"></div>
+          </div>
+
+          <div class="section-box">
+            <h3>
+              <span>完整逐字辨識結果</span>
+              <div class="toolbar">
+                <button id="copyTextBtn" class="btn" type="button">複製全文</button>
+                <button id="downloadMdBtn" class="btn" type="button">匯出 Markdown</button>
+                <button id="downloadJsonBtn" class="btn" type="button">匯出 JSON</button>
+              </div>
+            </h3>
+            <div id="finalTextOutput" class="light-pre"></div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Visual Overlay & Crops -->
+        <div id="tab-visual" class="tab-panel">
+          <p style="font-size:12px;color:var(--muted);margin-top:0;">
+            <span class="pill pill-blue">藍框</span> = RapidOCR 文字偵測框　
+            <span class="pill pill-orange">橘紅框</span> = OpenCV / 關鍵字自動定位的印章或日期註記候選區（ROI）
+          </p>
+          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#0f172a;text-align:center;">
+            <img id="overlayImg" alt="OCR 與印章定位疊圖" style="max-width:100%;max-height:620px;display:inline-block;" />
+          </div>
+          <h3 style="font-size:14px;margin:16px 0 8px;">自動裁切放大候選區（ROI）與區域重掃結果</h3>
+          <div id="roiGrid" class="roi-grid"></div>
+        </div>
+
+        <!-- Tab 3: OCR Lines -->
+        <div id="tab-ocr" class="tab-panel">
+          <div class="toolbar" style="justify-content:space-between;margin-bottom:10px;">
+            <input id="ocrFilter" class="search-input" type="text" placeholder="搜尋 OCR 偵測文字..." />
+            <button id="copyOcrBtn" class="btn" type="button">複製純 OCR 全文</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:52px;">#</th>
+                  <th style="width:120px;">位置 (Y, X)</th>
+                  <th style="width:90px;">信心度</th>
+                  <th>RapidOCR 辨識文字</th>
+                </tr>
+              </thead>
+              <tbody id="ocrTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 4: Raw & Prompt -->
+        <div id="tab-raw" class="tab-panel">
+          <h3 style="font-size:13px;margin:0 0 6px;">送往 Ollama 的組合 Prompt</h3>
+          <div id="promptOut" class="text-output" style="max-height:240px;margin-bottom:14px;"></div>
+          <h3 style="font-size:13px;margin:0 0 6px;">完整回傳 JSON（省略圖片 Base64 欄位以利閱讀）</h3>
+          <div id="rawJsonOut" class="text-output"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      imageDataUrl: null,
+      filename: null,
+      lastResult: null,
+      timerId: null,
+    };
+
+    const el = (id) => document.getElementById(id);
+
+    // Tabs
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        if (!state.lastResult) return;
+        document.querySelectorAll(".tab-panel").forEach((p) => {
+          p.classList.remove("active");
+          p.style.display = "none";
+        });
+        const target = el(btn.dataset.tab);
+        target.classList.add("active");
+        target.style.display = "block";
+      });
+    });
+
+    function showActiveTab() {
+      el("emptyState").style.display = "none";
+      const activeBtn = document.querySelector(".tab-btn.active");
+      document.querySelectorAll(".tab-panel").forEach((p) => (p.style.display = "none"));
+      el(activeBtn.dataset.tab).style.display = "block";
+    }
+
+    async function checkOllama() {
+      const url = el("ollamaUrl").value.trim();
+      const pill = el("ollamaStatus");
+      pill.className = "status-pill";
+      pill.innerHTML = '<span class="dot"></span>檢測中...';
+      try {
+        const res = await fetch(`/api/ollama/tags?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (data.online) {
+          pill.className = "status-pill ok";
+          pill.innerHTML = `<span class="dot"></span>已連線 (v${data.version || "?"})`;
+          const sel = el("modelSelect");
+          const current = sel.value;
+          const visionModels = data.models.filter((m) => (m.capabilities || []).includes("vision"));
+          if (visionModels.length > 0) {
+            sel.innerHTML = "";
+            const preferred = ["gemma4:26b", "gemma4:31b", "qwen3.5:35b", "gemma4:e4b"];
+            visionModels.sort((a, b) => {
+              const ia = preferred.indexOf(a.name), ib = preferred.indexOf(b.name);
+              return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+            });
+            visionModels.forEach((m) => {
+              const opt = document.createElement("option");
+              opt.value = m.name;
+              opt.textContent = `${m.name} (${m.parameter_size || m.size_gb + "GB"})`;
+              sel.appendChild(opt);
+            });
+            if ([...sel.options].some((o) => o.value === current)) sel.value = current;
+          }
+        } else {
+          pill.className = "status-pill err";
+          pill.innerHTML = `<span class="dot"></span>離線 / 逾時`;
+        }
+      } catch (e) {
+        pill.className = "status-pill err";
+        pill.innerHTML = `<span class="dot"></span>檢查失敗`;
+      }
+    }
+
+    async function initWorkbench() {
+      try {
+        const res = await fetch("/api/health");
+        if (res.ok) {
+          const cfg = await res.json();
+          if (cfg.default_ollama_url) {
+            el("ollamaUrl").value = cfg.default_ollama_url;
+          }
+        }
+      } catch (e) {
+        // Ignore and keep default URL
+      }
+      await checkOllama();
+    }
+
+    el("checkOllamaBtn").addEventListener("click", checkOllama);
+    window.addEventListener("DOMContentLoaded", initWorkbench);
+
+    function loadDataUrl(dataUrl, filename) {
+      state.imageDataUrl = dataUrl;
+      state.filename = filename || "clipboard_image.png";
+      const img = el("previewImg");
+      img.onload = () => {
+        el("previewDim").textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
+      };
+      img.src = dataUrl;
+      el("previewName").textContent = state.filename;
+      el("previewBox").style.display = "block";
+      el("runBtn").disabled = false;
+      el("runProgress").textContent = `已載入「${state.filename}」，點擊上方按鈕開始辨識`;
+    }
+
+    function handleFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = (e) => loadDataUrl(e.target.result, file.name);
+      reader.readAsDataURL(file);
+    }
+
+    const dropzone = el("dropzone");
+    const fileInput = el("fileInput");
+    dropzone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      handleFile(e.dataTransfer.files[0]);
+    });
+    window.addEventListener("paste", (e) => {
+      const items = (e.clipboardData || {}).items || [];
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          handleFile(item.getAsFile());
+          break;
+        }
+      }
+    });
+
+    document.querySelectorAll(".sample-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const resp = await fetch(btn.dataset.sample);
+        const blob = await resp.blob();
+        const reader = new FileReader();
+        reader.onload = (e) => loadDataUrl(e.target.result, btn.dataset.name);
+        reader.readAsDataURL(blob);
+      });
+    });
+
+    el("runBtn").addEventListener("click", async () => {
+      if (!state.imageDataUrl) return;
+      const runBtn = el("runBtn");
+      runBtn.disabled = true;
+      const t0 = Date.now();
+      runBtn.innerHTML = '<span class="spinner"></span> 正在執行 OCR 與模型分析...';
+      state.timerId = setInterval(() => {
+        const sec = ((Date.now() - t0) / 1000).toFixed(1);
+        el("runProgress").textContent = `處理中（已耗時 ${sec}s）... 本地 RapidOCR + OpenCV 定位 → Ollama VLM`;
+      }, 200);
+
+      try {
+        const payload = {
+          image_data_url: state.imageDataUrl,
+          filename: state.filename,
+          mode: el("modeSelect").value,
+          task_type: el("taskSelect").value,
+          ollama_url: el("ollamaUrl").value.trim(),
+          model: el("modelSelect").value,
+          think: el("thinkCheck").checked,
+          include_roi_crops: el("includeRoiCheck").checked,
+        };
+        const resp = await fetch("/api/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        state.lastResult = data;
+        renderResult(data);
+        el("runProgress").textContent = `完成！總耗時 ${data.timing.total_s} 秒`;
+      } catch (err) {
+        el("errorBanner").style.display = "block";
+        el("errorBanner").textContent = `執行失敗：${err.message}`;
+        el("runProgress").textContent = "執行發生錯誤";
+      } finally {
+        clearInterval(state.timerId);
+        runBtn.disabled = false;
+        runBtn.textContent = "開始執行完整 OCR 辨識";
+      }
+    });
+
+    function escapeHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderResult(data) {
+      showActiveTab();
+      const errBanner = el("errorBanner");
+      const infoBanner = el("infoBanner");
+      errBanner.style.display = "none";
+      infoBanner.style.display = "none";
+
+      // KPIs
+      el("kpiTotal").textContent = `${data.timing.total_s}s`;
+      el("kpiSubTime").textContent = `OCR ${data.timing.ocr_s}s / VLM ${data.timing.vlm_s}s`;
+      el("kpiLines").textContent = data.mode === "vlm_only" ? "未使用" : `${data.ocr.line_count} 行`;
+      el("kpiConf").textContent = data.mode === "vlm_only" ? "純 VLM 對照模式" : `平均信心度 ${data.ocr.avg_confidence_pct}%`;
+      el("kpiRois").textContent = data.mode === "vlm_only" ? "—" : `${data.stamps.roi_count} 區`;
+
+      if (data.mode === "ocr_only") {
+        el("kpiVlm").textContent = "僅本地 OCR";
+        el("kpiTokens").textContent = "未呼叫 Ollama";
+      } else if (data.vlm) {
+        el("kpiVlm").textContent = "完成校對";
+        el("kpiTokens").textContent = `${data.model} (${data.vlm.tokens_per_s} tok/s)`;
+        if (data.vlm.byte_tokens_cleaned > 0) {
+          infoBanner.style.display = "block";
+          infoBanner.textContent = `已自動清除模型輸出的 ${data.vlm.byte_tokens_cleaned} 個 <0x..> 位元組亂碼 token。`;
+        }
+      } else if (data.vlm_error) {
+        el("kpiVlm").textContent = "退回本地 OCR";
+        el("kpiTokens").textContent = data.model;
+        errBanner.style.display = "block";
+        errBanner.textContent = `Ollama 連線失敗（${data.vlm_error}）— 已完整保留本地 RapidOCR 辨識、印章裁切圖與本地日期候選結果！`;
+      }
+
+      // Tab 1: Stamps + Doc Fields + Full Text
+      const stampContainer = el("stampContainer");
+      stampContainer.innerHTML = "";
+      const vlmStamps = data.structured && Array.isArray(data.structured.stamp_dates) ? data.structured.stamp_dates : null;
+
+      if (vlmStamps && vlmStamps.length > 0) {
+        el("stampBadge").textContent = `AI 解析共 ${vlmStamps.length} 處`;
+        vlmStamps.forEach((st) => {
+          const div = document.createElement("div");
+          div.className = "stamp-item";
+          div.innerHTML = `
+            <div>
+              <div><strong>${escapeHtml(st.stamp_type || "蓋章／戳記")}</strong> <span class="pill pill-orange">${escapeHtml(st.location || "")}</span></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(st.note || "")}</div>
+            </div>
+            <div class="stamp-date">${escapeHtml(st.date || "未辨識")} ${escapeHtml(st.time || "")}</div>
+          `;
+          stampContainer.appendChild(div);
+        });
+      } else if (data.ocr.date_candidates && data.ocr.date_candidates.length > 0) {
+        el("stampBadge").textContent = `OCR 規則候選 ${data.ocr.date_candidates.length} 筆`;
+        data.ocr.date_candidates.forEach((c) => {
+          const div = document.createElement("div");
+          div.className = "stamp-item";
+          div.innerHTML = `
+            <div>
+              <div><strong>${escapeHtml(c.source)}</strong> <span class="pill pill-teal">信心 ${Math.round(c.score * 100)}%</span></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">原文：${escapeHtml(c.line)}</div>
+            </div>
+            <div class="stamp-date">${escapeHtml(c.text)}</div>
+          `;
+          stampContainer.appendChild(div);
+        });
+      } else {
+        el("stampBadge").textContent = "0 筆";
+        stampContainer.innerHTML = '<div style="font-size:13px;color:var(--muted);">未偵測到蓋章日期（或請切換為支援視覺的 Ollama 模型重新執行）。</div>';
+      }
+
+      const dfSec = el("docFieldsSection");
+      const dfGrid = el("docFieldsGrid");
+      dfGrid.innerHTML = "";
+      const df = data.structured && data.structured.doc_fields;
+      const hasDocFields = df && Object.values(df).some((v) => String(v || "").trim() !== "");
+      if (hasDocFields) {
+        dfSec.style.display = "block";
+        const labels = {
+          agency: "發文機關",
+          doc_number: "發文字號",
+          printed_date: "印刷發文日期",
+          recipient: "受文者",
+          subject: "主旨",
+        };
+        Object.entries(labels).forEach(([k, label]) => {
+          const item = document.createElement("div");
+          item.className = "kv-item";
+          if (k === "subject") item.style.gridColumn = "1 / -1";
+          item.innerHTML = `<div class="kv-k">${label}</div><div class="kv-v">${escapeHtml(df[k] || "—")}</div>`;
+          dfGrid.appendChild(item);
+        });
+      } else {
+        dfSec.style.display = "none";
+      }
+
+      // Final full text
+      let mainText = "";
+      if (data.structured && data.structured.full_text) {
+        mainText = data.structured.full_text;
+      } else if (data.structured && data.structured.summary) {
+        mainText = data.structured.summary;
+      } else if (data.vlm && data.vlm.content) {
+        mainText = data.vlm.content;
+      } else {
+        mainText = data.ocr.plain_text || "(無文字結果)";
+      }
+      el("finalTextOutput").textContent = mainText;
+
+      // Tab 2: Overlay & ROIs
+      el("overlayImg").src = data.stamps.overlay_data_url || state.imageDataUrl;
+      const roiGrid = el("roiGrid");
+      roiGrid.innerHTML = "";
+      if (data.stamps.rois.length === 0) {
+        roiGrid.innerHTML = '<div style="font-size:13px;color:var(--muted);">此模式或此圖片未切出印章候選區（ROI）。</div>';
+      } else {
+        data.stamps.rois.forEach((r, idx) => {
+          const card = document.createElement("div");
+          card.className = "roi-card";
+          const oTxt = r.ocr.length ? r.ocr.map((x) => `${x.text} (${Math.round(x.score * 100)}%)`).join("\n") : "(放大後無 OCR 文字檢出)";
+          card.innerHTML = `
+            <img src="${r.data_url}" alt="ROI ${idx + 1}" />
+            <div class="roi-meta">
+              <div><span class="pill pill-orange">ROI #${idx + 1}</span> <span class="pill pill-teal">${escapeHtml(r.reason)}</span></div>
+              <div style="color:var(--muted);margin:4px 0;">座標: [${r.bbox.join(", ")}] ｜ 放大尺寸: ${r.size.join("×")}</div>
+              <pre style="margin:6px 0 0;white-space:pre-wrap;font-size:12px;background:var(--surface-2);padding:6px;border-radius:5px;">${escapeHtml(oTxt)}</pre>
+            </div>
+          `;
+          roiGrid.appendChild(card);
+        });
+      }
+
+      // Tab 3: OCR Lines
+      renderOcrTable(data.ocr.lines, "");
+      el("ocrFilter").value = "";
+
+      // Tab 4: Prompt & Raw JSON
+      el("promptOut").textContent = data.prompt_used || "(未呼叫 VLM)";
+      const sanitized = JSON.parse(JSON.stringify(data));
+      if (sanitized.stamps) {
+        sanitized.stamps.overlay_data_url = sanitized.stamps.overlay_data_url ? "<data_url omitted>" : null;
+        (sanitized.stamps.rois || []).forEach((r) => (r.data_url = "<data_url omitted>"));
+      }
+      el("rawJsonOut").textContent = JSON.stringify(sanitized, null, 2);
+    }
+
+    function renderOcrTable(lines, query) {
+      const tbody = el("ocrTableBody");
+      tbody.innerHTML = "";
+      const q = (query || "").trim().toLowerCase();
+      const filtered = (lines || []).filter((l) => !q || l.text.toLowerCase().includes(q));
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);">無符合資料</td></tr>';
+        return;
+      }
+      filtered.forEach((l, i) => {
+        const xs = l.box.map((p) => p[0]);
+        const ys = l.box.map((p) => p[1]);
+        const cx = Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
+        const cy = Math.round(ys.reduce((a, b) => a + b, 0) / ys.length);
+        const pct = Math.round(l.score * 100);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td style="font-family:Consolas,monospace;font-size:12px;">y=${cy}, x=${cx}</td>
+          <td><span class="pill ${pct >= 90 ? "pill-teal" : "pill-orange"}">${pct}%</span></td>
+          <td style="font-family:Consolas,'Microsoft JhengHei',monospace;">${escapeHtml(l.text)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    el("ocrFilter").addEventListener("input", (e) => {
+      if (state.lastResult) renderOcrTable(state.lastResult.ocr.lines, e.target.value);
+    });
+
+    el("copyTextBtn").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(el("finalTextOutput").textContent || "");
+      el("copyTextBtn").textContent = "已複製！";
+      setTimeout(() => (el("copyTextBtn").textContent = "複製全文"), 1400);
+    });
+    el("copyOcrBtn").addEventListener("click", async () => {
+      if (!state.lastResult) return;
+      await navigator.clipboard.writeText(state.lastResult.ocr.plain_text || "");
+      el("copyOcrBtn").textContent = "已複製！";
+      setTimeout(() => (el("copyOcrBtn").textContent = "複製純 OCR 全文"), 1400);
+    });
+
+    el("downloadJsonBtn").addEventListener("click", () => {
+      if (!state.lastResult) return;
+      const sanitized = JSON.parse(JSON.stringify(state.lastResult));
+      if (sanitized.stamps) {
+        delete sanitized.stamps.overlay_data_url;
+        (sanitized.stamps.rois || []).forEach((r) => delete r.data_url);
+      }
+      const blob = new Blob([JSON.stringify(sanitized, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(state.filename || "ocr").replace(/\.[^.]+$/, "")}_ocr.json`;
+      a.click();
+    });
+
+    el("downloadMdBtn").addEventListener("click", () => {
+      if (!state.lastResult) return;
+      const r = state.lastResult;
+      const md = [
+        `# OCR 辨識報告：${r.filename || ""}`,
+        `- 模式：${r.mode} | 任務：${r.task_type} | 模型：${r.model}`,
+        `- 耗時：總計 ${r.timing.total_s}s（OCR ${r.timing.ocr_s}s / VLM ${r.timing.vlm_s}s）`,
+        "",
+        "## 辨識全文",
+        el("finalTextOutput").textContent || "",
+      ].join("\n");
+      const blob = new Blob([md], { type: "text/markdown" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(state.filename || "ocr").replace(/\.[^.]+$/, "")}_ocr.md`;
+      a.click();
+    });
+  </script>
+</body>
+</html>
